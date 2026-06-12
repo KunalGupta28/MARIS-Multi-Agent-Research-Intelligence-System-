@@ -14,15 +14,11 @@ Beautifully rendered Markdown output with interactive source grounding. Every st
 
 ### 📈 Workspace Components, Citations Graph & Benchmarks
 Explore different panels of the research workspace including extracted facts, generated references, the dynamic citation network, and execution metrics.
-```carousel
-![Extracted Facts](docs/images/extracted_facts.png)
-<!-- slide -->
-![References](docs/images/references.png)
-<!-- slide -->
-![Citation Network](docs/images/citation_network.png)
-<!-- slide -->
-![Evaluation Dashboard](docs/images/evaluation_dashboard.png)
-```
+<img width="1862" height="834" alt="evaluation_dashboard" src="https://github.com/user-attachments/assets/556a2b04-105d-4383-8a4e-5d70a43e16a4" />
+<img width="1590" height="816" alt="extracted_facts" src="https://github.com/user-attachments/assets/96f78e39-fe27-4333-af57-db7ad17a7dfa" />
+<img width="1625" height="255" alt="references" src="https://github.com/user-attachments/assets/6268a387-0d4a-46e8-b304-46ad3161135f" />
+<img width="1560" height="477" alt="citation_network" src="https://github.com/user-attachments/assets/11d20151-3783-46bb-b74c-b5f1bc925ae7" />
+
 
 ---
 
