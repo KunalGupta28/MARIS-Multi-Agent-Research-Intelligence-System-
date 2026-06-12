@@ -30,40 +30,7 @@ Explore different panels of the research workspace including extracted facts, ge
 
 Unlike single-agent prompts, MARIS divides research tasks among specialized, state-coordinated agent nodes using a **LangGraph StateGraph**.
 
-```mermaid
-graph TD
-    User([User Query]) -->|1. Trigger Session| Graph[LangGraph Orchestrator]
-    Graph -->|2. Coordinate State| Planner{Planner Node}
-    
-    %% Planning Phase
-    Planner -->|3. Decompose Query| SubQueries[3-5 Targeted Sub-queries]
-    
-    %% Retrieval Phase
-    SubQueries --> Retriever[Retriever Node]
-    Retriever -->|4. Async Search| Arxiv[arXiv API]
-    Arxiv -->|5. Local Download| PDFs[PDF Storage]
-    PDFs -->|6. Structural Parsing| Parser[PyMuPDF Parser]
-    
-    %% In-process Storage
-    Parser -->|7. Deduplicate & Store| SQL[(SQLite Relational DB)]
-    Parser -->|8. Index Payload| Qdrant[(Qdrant Vector DB)]
-    
-    %% Fact Extraction
-    Retriever -->|9. Hybrid Retrieval & RRF| Extractor[Extractor Node]
-    Extractor -->|10. Pydantic Structured Output| SQL
-    
-    %% Synthesis Phase
-    Extractor -->|11. Formatted Fact State| Synthesizer[Synthesizer Node]
-    Synthesizer -->|12. Grounded Output| Review([Literature Review])
-    
-    %% Observability Stream
-    Graph -.->|Telemetry & Timing Waterfalls| LangSmith((LangSmith observibility))
-    
-    style Graph fill:#f9f,stroke:#333,stroke-width:2px
-    style LangSmith fill:#8bf,stroke:#333,stroke-width:2px
-    style SQL fill:#fb9,stroke:#333,stroke-width:2px
-    style Qdrant fill:#bfb,stroke:#333,stroke-width:2px
-```
+<img width="531" height="1024" alt="image" src="https://github.com/user-attachments/assets/fa0035d5-d871-4c63-b8b3-d22dcb7af4ed" />
 
 ---
 
