@@ -1,0 +1,351 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); color: var(--color-text-primary); }
+.roadmap { padding: 1.5rem 0; }
+.phase { margin-bottom: 1.5rem; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+.phase-header { padding: 0.85rem 1.25rem; display: flex; align-items: center; gap: 12px; cursor: pointer; user-select: none; }
+.phase-header:hover { background: var(--color-background-secondary); }
+.phase-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 500; flex-shrink: 0; }
+.phase-meta { flex: 1; }
+.phase-title { font-size: 15px; font-weight: 500; }
+.phase-sub { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+.phase-tag { font-size: 11px; padding: 3px 10px; border-radius: 20px; font-weight: 500; flex-shrink: 0; }
+.chevron { font-size: 18px; color: var(--color-text-secondary); transition: transform 0.2s; }
+.chevron.open { transform: rotate(180deg); }
+.phase-body { padding: 0 1.25rem 1rem; display: none; }
+.phase-body.open { display: block; }
+.section { margin-top: 1rem; }
+.section-label { font-size: 11px; font-weight: 500; color: var(--color-text-tertiary); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 0.5rem; }
+.items { display: flex; flex-wrap: wrap; gap: 6px; }
+.item { font-size: 13px; padding: 4px 10px; border-radius: 20px; border: 0.5px solid var(--color-border-tertiary); color: var(--color-text-secondary); background: var(--color-background-secondary); }
+.item.tool { background: var(--color-background-info); color: var(--color-text-info); border-color: transparent; }
+.item.alt { background: var(--color-background-success); color: var(--color-text-success); border-color: transparent; }
+.item.warn { background: var(--color-background-warning); color: var(--color-text-warning); border-color: transparent; }
+.tasks { list-style: none; margin-top: 0.5rem; }
+.tasks li { font-size: 13px; padding: 5px 0; color: var(--color-text-secondary); border-bottom: 0.5px solid var(--color-border-tertiary); display: flex; gap: 8px; align-items: flex-start; line-height: 1.5; }
+.tasks li:last-child { border-bottom: none; }
+.tasks li::before { content: "·"; color: var(--color-text-tertiary); flex-shrink: 0; margin-top: 1px; }
+.note { font-size: 12px; margin-top: 0.75rem; padding: 8px 12px; border-radius: var(--border-radius-md); background: var(--color-background-warning); color: var(--color-text-warning); }
+.divider { height: 0.5px; background: var(--color-border-tertiary); margin: 0.75rem 0; }
+.ask-btn { margin-top: 1rem; font-size: 13px; padding: 6px 14px; border-radius: var(--border-radius-md); border: 0.5px solid var(--color-border-secondary); background: transparent; color: var(--color-text-primary); cursor: pointer; display: flex; align-items: center; gap: 6px; }
+.ask-btn:hover { background: var(--color-background-secondary); }
+</style>
+
+<div class="roadmap">
+
+<div style="margin-bottom: 1.5rem;">
+  <p style="font-size: 14px; color: var(--color-text-secondary); line-height: 1.7;">6 phases · ~5–6 months · optimized for 8 GB RAM. Click any phase to expand.</p>
+</div>
+
+<!-- Phase 1 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #EEEDFE; color: #534AB7;">1</div>
+    <div class="phase-meta">
+      <div class="phase-title">Foundations & environment setup</div>
+      <div class="phase-sub">Week 1–2 · Get your dev environment right before writing a single line</div>
+    </div>
+    <span class="phase-tag" style="background:#EEEDFE; color:#534AB7;">Start here</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">Concepts to learn</div>
+      <ul class="tasks">
+        <li>LLM fundamentals: tokens, context windows, temperature, system prompts</li>
+        <li>RAG (Retrieval-Augmented Generation): why it exists, how it works end-to-end</li>
+        <li>Embeddings: what they are, why cosine similarity works for semantic search</li>
+        <li>Agentic loops: the ReAct pattern (Reason → Act → Observe), tool calling</li>
+        <li>Graph databases basics: nodes, edges, properties — enough to model citations</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Tooling to install</div>
+      <div class="items">
+        <span class="item tool">Python 3.11</span>
+        <span class="item tool">pyenv (version manager)</span>
+        <span class="item tool">Poetry or uv (deps)</span>
+        <span class="item tool">VS Code + Pylance</span>
+        <span class="item tool">Docker Desktop</span>
+        <span class="item tool">Git + GitHub</span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Low-RAM tips</div>
+      <div class="note">Use WSL2 (Windows) or native Linux. Allocate Docker ≤ 4 GB. Kill Chrome while running models. Use swap space (4 GB) as a safety net.</div>
+    </div>
+    <button class="ask-btn" onclick="sendPrompt('How do I set up WSL2 + Python + Docker for AI development on 8 GB RAM?')">How to set this up on 8 GB RAM ↗</button>
+  </div>
+</div>
+
+<!-- Phase 2 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #E1F5EE; color: #0F6E56;">2</div>
+    <div class="phase-meta">
+      <div class="phase-title">Paper ingestion & RAG pipeline</div>
+      <div class="phase-sub">Week 3–5 · Fetch papers, chunk text, embed, store — the core of everything</div>
+    </div>
+    <span class="phase-tag" style="background:#E1F5EE; color:#0F6E56;">Core skill</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">What you'll build</div>
+      <ul class="tasks">
+        <li>ArXiv API client: search by keywords, download PDFs, extract metadata (title, authors, abstract, references)</li>
+        <li>PDF parser using PyMuPDF or pdfplumber — extract text per section (Abstract, Methods, Results)</li>
+        <li>Chunking strategy: recursive character splitter with 512-token chunks + 64-token overlap</li>
+        <li>Embedding pipeline: batch-embed chunks using OpenAI text-embedding-3-small or a local model</li>
+        <li>Vector DB insertion: upsert chunks with metadata (paper_id, section, page) as payload</li>
+        <li>Retrieval endpoint: given a query string, return top-k relevant chunks with scores</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Primary stack</div>
+      <div class="items">
+        <span class="item tool">LangChain (loaders, splitters)</span>
+        <span class="item tool">ArXiv Python API</span>
+        <span class="item tool">PyMuPDF</span>
+        <span class="item tool">Qdrant (Docker, local)</span>
+        <span class="item tool">OpenAI embeddings</span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Low-RAM alternatives</div>
+      <div class="items">
+        <span class="item alt">ChromaDB (in-process, no Docker)</span>
+        <span class="item alt">sentence-transformers/all-MiniLM (free local embeddings, ~100 MB)</span>
+        <span class="item alt">Qdrant in-memory mode (no persistence disk writes)</span>
+      </div>
+    </div>
+    <div class="note">Prefer OpenAI's embedding API over local models for now — saves 1–2 GB RAM for actual agent logic later.</div>
+    <button class="ask-btn" onclick="sendPrompt('Show me a complete RAG pipeline in Python using LangChain, PyMuPDF and ChromaDB')">Show me code for this pipeline ↗</button>
+  </div>
+</div>
+
+<!-- Phase 3 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #FAECE7; color: #993C1D;">3</div>
+    <div class="phase-meta">
+      <div class="phase-title">Multi-agent system with LangGraph</div>
+      <div class="phase-sub">Week 6–9 · The most impressive part of your resume — agentic orchestration</div>
+    </div>
+    <span class="phase-tag" style="background:#FAECE7; color:#993C1D;">Resume highlight</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">Agents to build (one at a time)</div>
+      <ul class="tasks">
+        <li><b>Planner agent</b> — receives a research query, decomposes it into sub-tasks, routes to specialist agents</li>
+        <li><b>Retriever agent</b> — queries ArXiv API + your vector DB, returns top papers and relevant chunks</li>
+        <li><b>Extractor agent</b> — reads a paper and extracts: problem statement, methods, datasets, results, limitations</li>
+        <li><b>Comparator agent</b> — given N extracted paper summaries, identifies agreements, contradictions, gaps</li>
+        <li><b>Writer agent</b> — synthesizes everything into a literature review section with proper citations</li>
+        <li><b>Future-work agent</b> — identifies open problems and suggests 3–5 research directions</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">LangGraph concepts to master</div>
+      <ul class="tasks">
+        <li>StateGraph: defining nodes (agents/tools) and edges (transitions) as a typed state machine</li>
+        <li>Conditional edges: routing based on agent output (e.g., "need more papers" → back to Retriever)</li>
+        <li>Checkpointing: persist state so you can resume a long research run</li>
+        <li>Human-in-the-loop: pause graph and ask for confirmation before expensive LLM calls</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Stack</div>
+      <div class="items">
+        <span class="item tool">LangGraph</span>
+        <span class="item tool">LangChain</span>
+        <span class="item tool">OpenAI GPT-4o-mini</span>
+        <span class="item tool">Pydantic (structured outputs)</span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">Low-cost alternatives</div>
+      <div class="items">
+        <span class="item alt">Groq API (fast, cheap Llama 3)</span>
+        <span class="item alt">Ollama + Mistral 7B (fully local, ~5 GB RAM)</span>
+        <span class="item warn">Avoid loading >1 local model at a time on 8 GB</span>
+      </div>
+    </div>
+    <button class="ask-btn" onclick="sendPrompt('Show me a LangGraph multi-agent setup with a Planner, Retriever and Writer node using StateGraph')">Show me a LangGraph skeleton ↗</button>
+  </div>
+</div>
+
+<!-- Phase 4 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #E6F1FB; color: #185FA5;">4</div>
+    <div class="phase-meta">
+      <div class="phase-title">Memory & citation graph</div>
+      <div class="phase-sub">Week 10–12 · Long-term memory + Neo4j graph — advanced differentiation</div>
+    </div>
+    <span class="phase-tag" style="background:#E6F1FB; color:#185FA5;">Differentiator</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">Memory system (3 tiers)</div>
+      <ul class="tasks">
+        <li><b>In-context memory</b> — current session state passed through LangGraph nodes (already done in Phase 3)</li>
+        <li><b>Episodic memory</b> — store past research sessions as summaries in vector DB, retrieve when topic recurs</li>
+        <li><b>Semantic memory</b> — structured facts (paper → method → dataset → metric) stored in Neo4j as a knowledge graph</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Citation graph with Neo4j</div>
+      <ul class="tasks">
+        <li>Parse reference lists from PDFs using GROBID (free, Docker) or regex on reference sections</li>
+        <li>Create nodes: Paper(arxiv_id, title, year), Author(name), Venue(name), Method(name)</li>
+        <li>Create edges: CITES, WRITTEN_BY, PUBLISHED_IN, USES_METHOD, IMPROVES_UPON</li>
+        <li>Query: "find all papers that cite BERT and also use contrastive learning"</li>
+        <li>Detect influential papers by in-degree (PageRank) and research clusters by community detection</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Stack</div>
+      <div class="items">
+        <span class="item tool">Neo4j Desktop (free)</span>
+        <span class="item tool">py2neo or neo4j Python driver</span>
+        <span class="item tool">GROBID (Docker)</span>
+        <span class="item tool">LangChain Neo4j integration</span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">RAM-saving approach</div>
+      <div class="items">
+        <span class="item alt">Neo4j Desktop (local, ~512 MB idle)</span>
+        <span class="item alt">NetworkX + SQLite as lighter alternative (no Docker)</span>
+        <span class="item warn">Don't run Neo4j + Qdrant + Ollama simultaneously</span>
+      </div>
+    </div>
+    <button class="ask-btn" onclick="sendPrompt('Show me a Neo4j schema and Cypher queries for a citation graph of research papers')">Show me the Neo4j schema ↗</button>
+  </div>
+</div>
+
+<!-- Phase 5 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #EAF3DE; color: #3B6D11;">5</div>
+    <div class="phase-meta">
+      <div class="phase-title">Evaluation, async & optimization</div>
+      <div class="phase-sub">Week 13–16 · What separates a project from an engineering portfolio piece</div>
+    </div>
+    <span class="phase-tag" style="background:#EAF3DE; color:#3B6D11;">Engineering depth</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">Evaluation (critical for placement interviews)</div>
+      <ul class="tasks">
+        <li>RAG eval: retrieval precision@k, recall@k using a hand-labelled 20-paper test set</li>
+        <li>Generation eval: RAGAS framework — faithfulness, answer relevancy, context precision</li>
+        <li>Agent eval: task completion rate, number of LLM calls per research query (cost proxy), latency</li>
+        <li>Build an eval dashboard (even a simple CSV + matplotlib) — shows you care about metrics</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Async pipeline</div>
+      <ul class="tasks">
+        <li>Use Python asyncio + aiohttp for concurrent ArXiv fetches (10x faster than sequential)</li>
+        <li>Batch embedding calls: send 100 chunks per OpenAI API call instead of 1 per call</li>
+        <li>Use Celery + Redis for background paper ingestion (papers get processed while agent is running)</li>
+        <li>Rate limiting: respect ArXiv's 3-req/sec limit with asyncio.Semaphore</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Retrieval optimization</div>
+      <ul class="tasks">
+        <li>Hybrid search: combine BM25 (keyword) + vector similarity scores with RRF (Reciprocal Rank Fusion)</li>
+        <li>HyDE: generate a hypothetical answer first, embed it, then retrieve — often beats vanilla RAG</li>
+        <li>Re-ranking: use Cohere Rerank API or a cross-encoder model to reorder top-20 results to top-5</li>
+        <li>Query expansion: LLM generates 3 paraphrases of the query; retrieve for all 3, then deduplicate</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Stack</div>
+      <div class="items">
+        <span class="item tool">RAGAS</span>
+        <span class="item tool">asyncio + aiohttp</span>
+        <span class="item tool">Celery + Redis</span>
+        <span class="item tool">BM25 (rank_bm25)</span>
+        <span class="item tool">Cohere Rerank (free tier)</span>
+      </div>
+    </div>
+    <button class="ask-btn" onclick="sendPrompt('How do I implement hybrid search with BM25 + vector similarity and Reciprocal Rank Fusion in Python?')">How to implement hybrid search ↗</button>
+  </div>
+</div>
+
+<!-- Phase 6 -->
+<div class="phase">
+  <div class="phase-header" onclick="toggle(this)">
+    <div class="phase-dot" style="background: #FAEEDA; color: #854F0B;">6</div>
+    <div class="phase-meta">
+      <div class="phase-title">UI, deployment & portfolio packaging</div>
+      <div class="phase-sub">Week 17–20 · Make it demonstrable in an interview in under 2 minutes</div>
+    </div>
+    <span class="phase-tag" style="background:#FAEEDA; color:#854F0B;">Placement-ready</span>
+    <span class="chevron">›</span>
+  </div>
+  <div class="phase-body">
+    <div class="section">
+      <div class="section-label">Frontend (simple, don't over-engineer)</div>
+      <ul class="tasks">
+        <li>Streamlit app: research query input → real-time agent progress stream → literature review output</li>
+        <li>Show the citation graph as an interactive network using pyvis or streamlit-agraph</li>
+        <li>Side panel: show retrieved papers with relevance scores, expandable chunks</li>
+        <li>Export button: generate a Markdown or PDF literature review</li>
+      </ul>
+    </div>
+    <div class="section">
+      <div class="section-label">Deployment (free tier friendly)</div>
+      <div class="items">
+        <span class="item tool">Docker Compose (local demo)</span>
+        <span class="item alt">Streamlit Cloud (free, public)</span>
+        <span class="item alt">Railway (free $5 credit/month)</span>
+        <span class="item alt">Render (free tier)</span>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-label">GitHub / portfolio checklist</div>
+      <ul class="tasks">
+        <li>README with architecture diagram, demo GIF, and a one-paragraph "how it works" section</li>
+        <li>System design doc (1 page) explaining your agent orchestration decisions — interviewers love this</li>
+        <li>Eval results section: show your RAGAS scores and what you did to improve them</li>
+        <li>Write a dev.to or Medium post about one interesting technical challenge you solved (e.g., HyDE, hybrid search)</li>
+        <li>.env.example file with all env vars documented — shows professional habits</li>
+      </ul>
+    </div>
+    <button class="ask-btn" onclick="sendPrompt('Help me write a README for an autonomous research agent project with architecture diagram, setup instructions and evaluation results')">Help me write the README ↗</button>
+  </div>
+</div>
+
+<!-- Timeline bar -->
+<div style="margin-top: 1.5rem; padding: 1rem 1.25rem; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg);">
+  <div class="section-label" style="margin-bottom: 0.75rem;">Timeline overview</div>
+  <div style="display: grid; grid-template-columns: repeat(6,1fr); gap: 4px;">
+    <div style="background:#EEEDFE; color:#534AB7; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W1–2<br>Setup</div>
+    <div style="background:#E1F5EE; color:#0F6E56; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W3–5<br>RAG</div>
+    <div style="background:#FAECE7; color:#993C1D; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W6–9<br>Agents</div>
+    <div style="background:#E6F1FB; color:#185FA5; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W10–12<br>Memory</div>
+    <div style="background:#EAF3DE; color:#3B6D11; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W13–16<br>Eval</div>
+    <div style="background:#FAEEDA; color:#854F0B; border-radius:6px; padding:6px 4px; font-size:11px; text-align:center; font-weight:500;">W17–20<br>Ship it</div>
+  </div>
+</div>
+
+</div>
+
+<script>
+function toggle(header) {
+  const body = header.nextElementSibling;
+  const chevron = header.querySelector('.chevron');
+  body.classList.toggle('open');
+  chevron.classList.toggle('open');
+}
+</script>

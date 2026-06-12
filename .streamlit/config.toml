@@ -1,0 +1,19 @@
+# ── MARIS Streamlit Configuration ──────────────────────────────────
+# Fixes: Prevents Streamlit's file watcher from scanning all module
+# __path__ attributes, which triggers the `transformers` library's
+# lazy imports of vision submodules (vitmatte, vitpose, yolos, zoedepth)
+# that require `torchvision` — a package not needed for text embeddings.
+
+[server]
+# Disable the file watcher completely to avoid triggering __path__ inspection
+# on the transformers library and eliminate unnecessary file-system polling.
+fileWatcherType = "none"
+
+[browser]
+# Prevent Streamlit from automatically opening a browser tab on launch.
+# Remove or set to true if you prefer auto-open behavior.
+gatherUsageStats = false
+
+[theme]
+# Dark theme to match the MARIS premium UI
+base = "dark"

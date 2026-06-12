@@ -1,0 +1,22 @@
+{
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "**/*.pyc": true,
+        "**/__pycache__": true,
+        "**/.pytest_cache": true,
+        "**/.venv": true,
+        "**/test_db": true,
+        "**/test_qdrant_temp": true,
+        "**/test_temp.db": true
+    },
+    "search.exclude": {
+        "**/.venv": true,
+        "**/test_db": true,
+        "**/test_qdrant_temp": true,
+        "**/test_temp.db": true
+    },
+    "python.analysis.exclude": [
+        "**/.venv"
+    ]
+}
