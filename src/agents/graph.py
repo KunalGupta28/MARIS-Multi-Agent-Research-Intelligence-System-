@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
 from langgraph.graph import StateGraph, END
@@ -28,19 +29,40 @@ from src.storage.database import MARISDatabase
 logger = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class GraphConfig:
+    """Configuration parameters for the MARIS research graph.
+
+    Centralizes graph-level parameters that control retry behaviour
+    and routing thresholds, making the graph configurable without
+    modifying the orchestration code.
+    """
+
+    min_chunks_threshold: int = 3
+    """Minimum retrieved chunks required before proceeding to extraction."""
+
+    max_iterations: int = 3
+    """Maximum retry iterations before forcing the pipeline to proceed."""
+
+
+# Default graph configuration
+_DEFAULT_CONFIG = GraphConfig()
+
+
 def _should_retry_retrieval(state: ResearchState) -> str:
     """
     Conditional edge: decide whether to retry retrieval or proceed.
 
-    Routes back to planner if we found too few chunks (< 3) and haven't
-    exceeded the max iteration count.
+    Routes back to planner if we found too few chunks (< threshold) and
+    haven't exceeded the max iteration count.
     """
+    config = _DEFAULT_CONFIG
     if (
-        len(state.retrieved_chunks) < 3
+        len(state.retrieved_chunks) < config.min_chunks_threshold
         and state.iteration_count < state.max_iterations
     ):
         logger.info(
-            f"[Router] Too few chunks ({len(state.retrieved_chunks)}), "
+            f"[Router] Too few chunks ({len(state.retrieved_chunks)}/{config.min_chunks_threshold}), "
             f"retry {state.iteration_count + 1}/{state.max_iterations}"
         )
         return "retry"

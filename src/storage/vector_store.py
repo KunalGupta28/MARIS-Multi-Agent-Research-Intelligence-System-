@@ -5,15 +5,17 @@ Runs entirely in-process using qdrant-client's local path mode (no Docker, no se
 Supports:
     - Batch embedding via OpenAI API or local HuggingFace models
     - Semantic vector search
-    - BM25 keyword search
+    - BM25 keyword search with improved tokenization
     - Reciprocal Rank Fusion (RRF) for hybrid retrieval
     - Section-filtered search
+    - Collection lifecycle management (create, delete, stats)
 """
 
 from __future__ import annotations
 
 import logging
 import pickle
+import re
 from pathlib import Path
 from typing import Optional
 
@@ -75,7 +77,7 @@ class VectorStore:
         return self._VECTOR_DIMS.get(self.settings.embedding_provider, 384)
 
     def _ensure_collection(self) -> None:
-        """Create the Qdrant collection if it doesn't exist."""
+        """Create the Qdrant collection if it doesn't exist, or validate dimensions."""
         dim = self._get_vector_dim()
         collections = [c.name for c in self.client.get_collections().collections]
         if self.collection_name not in collections:
@@ -90,6 +92,19 @@ class VectorStore:
                 f"Created Qdrant collection '{self.collection_name}' "
                 f"(dim={dim}, provider={self.settings.embedding_provider})"
             )
+        else:
+            # Validate that the existing collection matches expected dimensions
+            try:
+                info = self.client.get_collection(self.collection_name)
+                existing_dim = info.config.params.vectors.size
+                if existing_dim != dim:
+                    logger.warning(
+                        f"Collection '{self.collection_name}' has dimension {existing_dim} "
+                        f"but configured provider expects {dim}. "
+                        f"Consider recreating the collection if embeddings are mismatched."
+                    )
+            except Exception as e:
+                logger.debug(f"Could not validate collection dimensions: {e}")
 
     def _get_embeddings(self):
         """Lazy-load the embedding model to avoid import overhead at startup."""
@@ -243,6 +258,15 @@ class VectorStore:
             for hit in results
         ]
 
+    @staticmethod
+    def _tokenize(text: str) -> list[str]:
+        """Tokenize text for BM25 indexing using word-boundary regex.
+
+        Uses ``re.findall`` instead of naive ``.split()`` for better
+        handling of punctuation, hyphens, and special characters.
+        """
+        return re.findall(r'\b\w+\b', text.lower())
+
     def bm25_search(self, query: str, top_k: int = 10) -> list[dict]:
         """
         Perform BM25 keyword search over all stored chunks.
@@ -254,7 +278,7 @@ class VectorStore:
         if self._bm25 is None or not self._bm25_chunk_ids:
             return []
 
-        tokenized_query = query.lower().split()
+        tokenized_query = self._tokenize(query)
         scores = self._bm25.get_scores(tokenized_query)
 
         # Get top-k indices
@@ -409,7 +433,7 @@ class VectorStore:
             text = r["text"]
             cid = r["chunk_id"]
             if text and cid:
-                corpus.append(text.lower().split())
+                corpus.append(self._tokenize(text))
                 chunk_ids.append(cid)
 
         if corpus:
@@ -440,3 +464,19 @@ class VectorStore:
         except Exception as e:
             logger.debug(f"Error fetching collection stats: {e}")
             return {"vectors_count": 0, "points_count": 0, "status": "empty"}
+
+    def delete_collection(self) -> None:
+        """Delete the Qdrant collection (useful for test cleanup)."""
+        try:
+            self.client.delete_collection(self.collection_name)
+            logger.info(f"Deleted Qdrant collection '{self.collection_name}'")
+        except Exception as e:
+            logger.debug(f"Could not delete collection: {e}")
+
+    def close(self) -> None:
+        """Close the Qdrant client connection and release resources."""
+        try:
+            self.client.close()
+            logger.debug("Qdrant client closed")
+        except Exception as e:
+            logger.debug(f"Error closing Qdrant client: {e}")

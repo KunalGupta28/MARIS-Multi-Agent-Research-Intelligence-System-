@@ -9,46 +9,64 @@ for validation and serialization.
 from __future__ import annotations
 
 from typing import Annotated, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import operator
 
 
 class RetrievedChunk(BaseModel):
-    """A single retrieved text chunk with source grounding metadata."""
+    """A single retrieved text chunk with source grounding metadata.
 
-    chunk_id: str = ""
-    paper_id: str = ""
-    text: str = ""
-    section: str = ""
-    page_number: int = 0
-    title: str = ""
-    authors: list[str] = Field(default_factory=list)
-    pdf_url: str = ""
-    score: float = 0.0
+    Each chunk carries full provenance so that every generated sentence
+    can be traced back to its exact origin in the source paper.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    chunk_id: str = Field(default="", description="Deterministic hash ID of the chunk (paper_id + chunk_index)")
+    paper_id: str = Field(default="", description="arXiv ID of the source paper")
+    text: str = Field(default="", description="Raw text content of the chunk")
+    section: str = Field(default="", description="Section name (e.g., 'Abstract', 'Methods')")
+    page_number: int = Field(default=0, description="1-indexed page number in the source PDF")
+    title: str = Field(default="", description="Title of the source paper")
+    authors: list[str] = Field(default_factory=list, description="List of author names")
+    pdf_url: str = Field(default="", description="URL to the PDF on arXiv")
+    score: float = Field(default=0.0, description="Retrieval score (vector, BM25, or RRF fused)")
 
 
 class ExtractedFact(BaseModel):
-    """A structured fact extracted from a paper."""
+    """A structured fact extracted from a paper via schema-guided LLM extraction.
 
-    paper_id: str = ""
-    title: str = ""
-    problem_statement: str = ""
-    methods: list[str] = Field(default_factory=list)
-    datasets: list[str] = Field(default_factory=list)
-    key_results: list[str] = Field(default_factory=list)
-    limitations: list[str] = Field(default_factory=list)
-    benchmarks: list[dict] = Field(default_factory=list)
-    citations: list[dict] = Field(default_factory=list)
+    Contains the core scientific elements needed for literature review synthesis:
+    problem, methods, datasets, results, limitations, and citation metadata.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    paper_id: str = Field(default="", description="arXiv ID of the source paper")
+    title: str = Field(default="", description="Title of the source paper")
+    problem_statement: str = Field(default="", description="Primary research problem or question")
+    methods: list[str] = Field(default_factory=list, description="Models, methods, or algorithms proposed")
+    datasets: list[str] = Field(default_factory=list, description="Datasets or benchmarks used for evaluation")
+    key_results: list[str] = Field(default_factory=list, description="Main results and performance metrics")
+    limitations: list[str] = Field(default_factory=list, description="Acknowledged limitations or constraints")
+    benchmarks: list[dict] = Field(default_factory=list, description="Granular benchmark metrics (dataset, metric, value)")
+    citations: list[dict] = Field(default_factory=list, description="Key references cited by this paper")
 
 
 
 class AgentStatus(BaseModel):
-    """Status update from an agent node (for streaming to UI)."""
+    """Status update from an agent node (for streaming to UI).
 
-    node_name: str = ""
-    status: str = ""  # "started" | "completed" | "error"
-    message: str = ""
-    tokens_used: int = 0
+    Emitted at the start and end of each node's execution to provide
+    real-time visibility into the multi-agent pipeline progress.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    node_name: str = Field(default="", description="Name of the agent node (e.g., 'Planner', 'Retriever')")
+    status: str = Field(default="", description="Execution status: 'started' | 'completed' | 'error'")
+    message: str = Field(default="", description="Human-readable status message for UI display")
+    tokens_used: int = Field(default=0, description="Token count consumed by this node's LLM call")
 
 
 class ResearchState(BaseModel):
@@ -56,41 +74,49 @@ class ResearchState(BaseModel):
     The global state object that flows through the LangGraph pipeline.
 
     Each agent node reads from and writes to this state. LangGraph handles
-    state persistence and checkpointing automatically.
+    state persistence and checkpointing automatically. List fields use
+    ``operator.add`` as the reducer so that partial updates from each node
+    are concatenated rather than overwritten.
     """
 
+    model_config = ConfigDict(frozen=False)
+
     # ── Input ─────────────────────────────────────────────────────
-    research_query: str = ""
-    session_id: str = ""
+    research_query: str = Field(default="", description="The user's original research question")
+    session_id: str = Field(default="", description="Unique session identifier for provenance tracking")
 
     # ── Planner Output ────────────────────────────────────────────
-    sub_queries: Annotated[list[str], operator.add] = Field(default_factory=list)
-    research_plan: str = ""
+    sub_queries: Annotated[list[str], operator.add] = Field(
+        default_factory=list, description="Decomposed sub-queries generated by the Planner"
+    )
+    research_plan: str = Field(default="", description="Human-readable research plan summary")
 
     # ── Retriever Output ──────────────────────────────────────────
     retrieved_chunks: Annotated[list[RetrievedChunk], operator.add] = Field(
-        default_factory=list
+        default_factory=list, description="Text chunks retrieved via hybrid search"
     )
     papers_found: Annotated[list[str], operator.add] = Field(
-        default_factory=list
-    )  # list of arXiv IDs
+        default_factory=list, description="List of arXiv IDs discovered during retrieval"
+    )
 
     # ── Extractor Output ──────────────────────────────────────────
     extracted_facts: Annotated[list[ExtractedFact], operator.add] = Field(
-        default_factory=list
+        default_factory=list, description="Structured facts extracted from retrieved chunks"
     )
 
     # ── Synthesizer Output ────────────────────────────────────────
-    literature_review: str = ""
+    literature_review: str = Field(default="", description="Final generated literature review in Markdown")
 
     # ── Observability ─────────────────────────────────────────────
     agent_trace: Annotated[list[AgentStatus], operator.add] = Field(
-        default_factory=list
+        default_factory=list, description="Ordered list of agent status updates for UI streaming"
     )
-    total_tokens_used: int = 0
-    errors: Annotated[list[str], operator.add] = Field(default_factory=list)
+    total_tokens_used: int = Field(default=0, description="Cumulative token count across all LLM calls")
+    errors: Annotated[list[str], operator.add] = Field(
+        default_factory=list, description="Error messages collected during pipeline execution"
+    )
 
     # ── Control Flow ──────────────────────────────────────────────
-    current_step: str = "planner"
-    iteration_count: int = 0
-    max_iterations: int = 3
+    current_step: str = Field(default="planner", description="Current pipeline stage name")
+    iteration_count: int = Field(default=0, description="Number of retry iterations completed")
+    max_iterations: int = Field(default=3, description="Maximum retry iterations before forcing proceed")

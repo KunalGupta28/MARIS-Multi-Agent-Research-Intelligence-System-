@@ -14,82 +14,7 @@ from src.agents.llm import get_llm
 from langchain_core.runnables import RunnableLambda
 
 
-class FakeResponse:
-    def __init__(self, content):
-        self.content = content
-        self.usage_metadata = {"total_tokens": 120}
-
-
-class FakeLLM:
-    """Mock LLM to return predetermined outputs for agent prompts."""
-    def __init__(self):
-        self.invocations = []
-
-    def invoke(self, messages, *args, **kwargs):
-        # Flatten prompt content
-        prompt = str(messages)
-        self.invocations.append(prompt)
-        
-        # Lowercase check
-        prompt_lower = prompt.lower()
-        
-        if "research planning agent" in prompt_lower or "planner" in prompt_lower:
-            # Planner response
-            return FakeResponse('["attention in state space models", "transformer limitations"]')
-        elif "research extraction agent" in prompt_lower or "extractor" in prompt_lower:
-            # Extractor response
-            return FakeResponse('{"problem_statement": "Temporal alignment", "methods": ["SSM"], "datasets": ["LRA"], "key_results": ["SOTA"], "limitations": ["Quadratic"]}')
-        else:
-            # Synthesizer response
-            return FakeResponse("## Literature Review\n\nThis is a mock synthesis review [1].\n\n### References\n[1] Author, 'Title', 2020. https://arxiv.org/abs/1905.04149")
-
-
-@pytest.fixture
-def mock_llm(monkeypatch):
-    from src.agents.nodes import ScientificExtractionSchema, BenchmarkMetric, StructuredCitation
-    fake = FakeLLM()
-    
-    # Create a mock chat model
-    mock_chat_model = MagicMock()
-    
-    # Define with_structured_output behavior to return Pydantic schema
-    mock_chat_model.with_structured_output.return_value = RunnableLambda(
-        lambda inputs: ScientificExtractionSchema(
-            problem_statement="Temporal alignment",
-            methods=["SSM"],
-            datasets=["LRA"],
-            key_results=["SOTA"],
-            limitations=["Quadratic"],
-            benchmarks=[
-                BenchmarkMetric(
-                    dataset="LRA",
-                    metric_name="Accuracy",
-                    value="84.2%",
-                    baseline="81.0%",
-                    context="Mamba-3B"
-                )
-            ],
-            citations=[
-                StructuredCitation(
-                    citation_key="[^arXiv:1905.04149]",
-                    title="SSM Survey",
-                    authors="Alice",
-                    year="2020"
-                )
-            ]
-        )
-    )
-    
-    # Define standard invoke behavior (for planner and synthesizer)
-    mock_chat_model.invoke.side_effect = lambda prompt_val, *args, **kw: fake.invoke(prompt_val)
-    mock_chat_model.side_effect = lambda prompt_val, *args, **kw: fake.invoke(prompt_val)
-    
-    # Patch get_llm to return our mock_chat_model
-    monkeypatch.setattr("src.agents.nodes.get_llm", lambda *a, **kw: mock_chat_model)
-    monkeypatch.setattr("src.agents.graph.compile_graph", lambda *a, **kw: MagicMock())
-    return fake
-
-
+from tests.conftest import FakeResponse
 class TestAgentNodes:
     def test_planner_node(self, mock_llm):
         state = ResearchState(research_query="EEG analysis")
@@ -141,6 +66,28 @@ class TestAgentNodes:
         assert "literature_review" in output
         assert "This is a mock synthesis review" in output["literature_review"]
         assert output["current_step"] == "complete"
+
+    def test_planner_node_empty_query(self, mock_llm):
+        state = ResearchState(research_query="")
+        output = planner_node(state)
+        assert "sub_queries" in output
+        assert len(output["sub_queries"]) > 0
+
+    def test_planner_node_invalid_json_fallback(self, mock_llm, monkeypatch):
+        from src.agents.nodes import get_llm
+        mock_chat_model = get_llm()
+        
+        # Override the return value of invoke for this test to return invalid JSON
+        mock_chat_model.invoke.side_effect = lambda prompt_val, *args, **kw: FakeResponse("not a json array")
+        mock_chat_model.side_effect = lambda prompt_val, *args, **kw: FakeResponse("not a json array")
+        
+        state = ResearchState(research_query="Quantum Computing")
+        output = planner_node(state)
+        
+        assert "sub_queries" in output
+        assert output["sub_queries"] == ["Quantum Computing"]
+        assert "Fallback" in output["research_plan"]
+        assert any(trace.status == "error" for trace in output["agent_trace"])
 
 
 class TestRetryLogic:

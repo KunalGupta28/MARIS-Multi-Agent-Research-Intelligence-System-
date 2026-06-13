@@ -13,10 +13,12 @@ Nodes:
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
+import time
+from dataclasses import dataclass, field
+from functools import lru_cache
 from typing import Any
 
 from pydantic import BaseModel, Field
@@ -34,36 +36,38 @@ from src.ingestion.arxiv_client import ArxivClient
 from src.storage.vector_store import VectorStore
 from src.storage.database import MARISDatabase
 from src.ingestion.pipeline import IngestionPipeline
+from src.eval.metrics import LatencyTracker
 
 logger = logging.getLogger(__name__)
 
 
-# ── Shared Resources (initialized lazily) ──────────────────────────
-
-_arxiv_client: ArxivClient | None = None
-_vector_store: VectorStore | None = None
-_db: MARISDatabase | None = None
+# ── Dependency Container (replaces mutable globals for testability) ──
 
 
-def _get_db() -> MARISDatabase:
-    global _db
-    if _db is None:
-        _db = MARISDatabase()
-    return _db
+@dataclass
+class NodeDependencies:
+    """Shared resources for agent nodes, initialized lazily via factory.
+
+    Using a dataclass with an ``@lru_cache`` factory instead of mutable
+    module-level globals improves testability: tests can inject mock
+    dependencies without monkeypatching module state.
+    """
+
+    db: MARISDatabase = field(default_factory=MARISDatabase)
+    arxiv_client: ArxivClient | None = None
+    vector_store: VectorStore | None = None
+
+    def __post_init__(self):
+        if self.arxiv_client is None:
+            self.arxiv_client = ArxivClient(db=self.db)
+        if self.vector_store is None:
+            self.vector_store = VectorStore(db=self.db)
 
 
-def _get_arxiv_client() -> ArxivClient:
-    global _arxiv_client
-    if _arxiv_client is None:
-        _arxiv_client = ArxivClient(db=_get_db())
-    return _arxiv_client
-
-
-def _get_vector_store() -> VectorStore:
-    global _vector_store
-    if _vector_store is None:
-        _vector_store = VectorStore(db=_get_db())
-    return _vector_store
+@lru_cache(maxsize=1)
+def _get_deps() -> NodeDependencies:
+    """Return a cached singleton of node dependencies."""
+    return NodeDependencies()
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -124,62 +128,63 @@ def planner_node(state: ResearchState) -> dict[str, Any]:
     trace = AgentStatus(
         node_name="Planner",
         status="started",
-        message=f"Decomposing research query into sub-topics...",
+        message="Decomposing research query into sub-topics...",
     )
 
     llm = get_llm()
     chain = PLANNER_PROMPT | llm
 
-    try:
-        response = chain.invoke({"query": state.research_query})
-        content = response.content.strip()
+    with LatencyTracker("Planner") as timer:
+        try:
+            response = chain.invoke({"query": state.research_query})
+            content = response.content.strip()
 
-        # Parse JSON array from LLM response (robust extraction)
-        # Try regex extraction first — handles code blocks, extra text, etc.
-        json_match = re.search(r'\[.*\]', content, re.DOTALL)
-        if json_match:
-            content = json_match.group(0)
+            # Parse JSON array from LLM response (robust extraction)
+            # Try regex extraction first — handles code blocks, extra text, etc.
+            json_match = re.search(r'\[.*\]', content, re.DOTALL)
+            if json_match:
+                content = json_match.group(0)
 
-        sub_queries = json.loads(content)
+            sub_queries = json.loads(content)
 
-        if not isinstance(sub_queries, list):
-            sub_queries = [state.research_query]
+            if not isinstance(sub_queries, list):
+                sub_queries = [state.research_query]
 
-        plan = f"Generated {len(sub_queries)} sub-queries:\n"
-        for i, sq in enumerate(sub_queries, 1):
-            plan += f"  {i}. {sq}\n"
+            plan = f"Generated {len(sub_queries)} sub-queries:\n"
+            for i, sq in enumerate(sub_queries, 1):
+                plan += f"  {i}. {sq}\n"
 
-        logger.info(f"[Planner] Generated {len(sub_queries)} sub-queries")
+            logger.info(f"[Planner] Generated {len(sub_queries)} sub-queries in {timer.elapsed:.2f}s")
 
-        return {
-            "sub_queries": sub_queries,
-            "research_plan": plan,
-            "agent_trace": [
-                trace,
-                AgentStatus(
-                    node_name="Planner",
-                    status="completed",
-                    message=f"Created {len(sub_queries)} sub-queries",
-                ),
-            ],
-            "current_step": "retriever",
-        }
+            return {
+                "sub_queries": sub_queries,
+                "research_plan": plan,
+                "agent_trace": [
+                    trace,
+                    AgentStatus(
+                        node_name="Planner",
+                        status="completed",
+                        message=f"Created {len(sub_queries)} sub-queries ({timer.elapsed:.1f}s)",
+                    ),
+                ],
+                "current_step": "retriever",
+            }
 
-    except Exception as e:
-        logger.error(f"[Planner] Error: {e}")
-        return {
-            "sub_queries": [state.research_query],
-            "research_plan": "Fallback: using original query directly.",
-            "agent_trace": [
-                AgentStatus(
-                    node_name="Planner",
-                    status="error",
-                    message=f"Error: {str(e)[:200]}. Using original query.",
-                )
-            ],
-            "errors": [f"Planner error: {str(e)}"],
-            "current_step": "retriever",
-        }
+        except Exception as e:
+            logger.error(f"[Planner] Error: {e}")
+            return {
+                "sub_queries": [state.research_query],
+                "research_plan": "Fallback: using original query directly.",
+                "agent_trace": [
+                    AgentStatus(
+                        node_name="Planner",
+                        status="error",
+                        message=f"Error: {str(e)[:200]}. Using original query.",
+                    )
+                ],
+                "errors": [f"Planner error: {str(e)}"],
+                "current_step": "retriever",
+            }
 
 
 # ═══════════════════════════════════════════════════════════════════
@@ -204,8 +209,9 @@ def retriever_node(state: ResearchState) -> dict[str, Any]:
         )
     ]
 
-    arxiv_client = _get_arxiv_client()
-    vector_store = _get_vector_store()
+    deps = _get_deps()
+    arxiv_client = deps.arxiv_client
+    vector_store = deps.vector_store
     all_chunks: list[RetrievedChunk] = []
     all_paper_ids: list[str] = []
 
@@ -227,7 +233,7 @@ def retriever_node(state: ResearchState) -> dict[str, Any]:
 
             # Auto-ingestion of top 3 results to maximize grounding coverage
             if papers:
-                db_ref = _get_db()
+                db_ref = deps.db
                 pipeline = IngestionPipeline(vector_store=vector_store)
                 for paper in papers[:3]:
                     paper_record = db_ref.get_paper(paper.arxiv_id)
@@ -256,7 +262,7 @@ def retriever_node(state: ResearchState) -> dict[str, Any]:
             for r in results:
                 # Enrich with verified DB metadata
                 pid = r.get("paper_id", "")
-                db_paper = _get_db().get_paper(pid) if pid else None
+                db_paper = deps.db.get_paper(pid) if pid else None
                 chunk = RetrievedChunk(
                     chunk_id=r.get("chunk_id", ""),
                     paper_id=pid,
@@ -384,7 +390,7 @@ def extractor_node(state: ResearchState) -> dict[str, Any]:
 
     for paper_id, chunks in paper_chunks.items():
         # Always use verified DB metadata as source of truth
-        db_paper = _get_db().get_paper(paper_id)
+        db_paper = _get_deps().db.get_paper(paper_id)
         if db_paper:
             title = db_paper["title"]
             authors_list = db_paper["authors"] if isinstance(db_paper["authors"], list) else []
@@ -518,7 +524,7 @@ def _build_citation_pool(state: ResearchState) -> list[dict]:
 
     Returns a list of dicts with keys: index, paper_id, title, authors, year, url.
     """
-    db = _get_db()
+    db = _get_deps().db
     seen_ids = []
     # Collect unique paper_ids preserving order (facts first, then chunks)
     for fact in state.extracted_facts:

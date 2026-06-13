@@ -1,11 +1,44 @@
-# MARIS data & environment files
-.env
-data/
+# ── Python ────────────────────────────────────────────────────────
 __pycache__/
-*.pyc
-.ruff_cache/
-.pytest_cache/
+*.py[cod]
+*$py.class
 *.egg-info/
 dist/
 build/
+*.egg
+
+# ── Virtual Environments ──────────────────────────────────────────
 .venv/
+venv/
+env/
+
+# ── Environment & Secrets ─────────────────────────────────────────
+.env
+
+# ── MARIS Runtime Data ────────────────────────────────────────────
+data/
+
+# ── Test Artifacts ────────────────────────────────────────────────
+test_db/
+test_qdrant_temp/
+test_temp.db
+*.db
+!data/.gitkeep
+.pytest_cache/
+htmlcov/
+.coverage
+
+# ── IDE & Editor ──────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ── Linting & Formatting Cache ────────────────────────────────────
+.ruff_cache/
+.mypy_cache/
+
+# ── OS Files ──────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db

@@ -164,3 +164,46 @@ class TestStats:
         db.upsert_paper(arxiv_id="test", title="Test", authors=["A"])
         stats = db.get_stats()
         assert stats["papers"] == 1
+
+
+class TestDatabaseConcurrencyAndConfiguration:
+    def test_wal_mode_enabled(self, db):
+        import sqlite3
+        conn = sqlite3.connect(str(db.db_path))
+        cursor = conn.cursor()
+        cursor.execute("PRAGMA journal_mode")
+        mode = cursor.fetchone()[0]
+        conn.close()
+        assert mode.lower() == "wal"
+
+    def test_concurrent_writes(self, db):
+        import threading
+        import queue
+        
+        errors = queue.Queue()
+        
+        def write_worker(worker_id):
+            try:
+                db.upsert_paper(
+                    arxiv_id=f"worker_{worker_id}",
+                    title=f"Paper from worker {worker_id}",
+                    authors=[f"Author {worker_id}"],
+                )
+            except Exception as e:
+                errors.put(e)
+                
+        threads = []
+        for i in range(10):
+            t = threading.Thread(target=write_worker, args=(i,))
+            threads.append(t)
+            t.start()
+            
+        for t in threads:
+            t.join()
+            
+        assert errors.empty(), f"Encountered concurrent write errors: {list(errors.queue)}"
+        
+        # Verify all papers were written successfully
+        stats = db.get_stats()
+        assert stats["papers"] == 10
+

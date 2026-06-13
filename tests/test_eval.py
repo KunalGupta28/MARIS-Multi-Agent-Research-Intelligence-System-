@@ -7,6 +7,8 @@ import pytest
 from src.eval.metrics import (
     calculate_precision_at_k,
     calculate_recall_at_k,
+    calculate_ndcg_at_k,
+    calculate_mrr,
     validate_grounding,
     score_faithfulness,
 )
@@ -41,6 +43,41 @@ class TestEvaluationMetrics:
 
         # Empty ground truth -> defaults to 1.0 (perfect recall of nothing)
         assert calculate_recall_at_k(retrieved, [], k=2) == 1.0
+
+    def test_ndcg_at_k(self):
+        retrieved = ["paper1", "paper2", "paper3", "paper4"]
+        ground_truth = ["paper2", "paper4", "paper5"]
+        
+        # NDCG@1: "paper1" is not relevant -> 0.0
+        assert calculate_ndcg_at_k(retrieved, ground_truth, k=1) == 0.0
+        
+        # NDCG@2: "paper2" relevant at pos 2 -> DCG = 1/log2(3) = 0.6309, IDCG = 1/log2(2) = 1.0 -> NDCG = 0.6309
+        import math
+        dcg2 = 1.0 / math.log2(3)
+        idcg2 = 1.0 / math.log2(2)
+        assert calculate_ndcg_at_k(retrieved, ground_truth, k=2) == pytest.approx(dcg2 / idcg2)
+
+        # NDCG edge cases
+        assert calculate_ndcg_at_k(retrieved, ground_truth, k=0) == 0.0
+        assert calculate_ndcg_at_k([], ground_truth, k=5) == 0.0
+        assert calculate_ndcg_at_k(retrieved, [], k=5) == 0.0
+
+    def test_mrr(self):
+        retrieved = ["paper1", "paper2", "paper3", "paper4"]
+        ground_truth = ["paper2", "paper4", "paper5"]
+        
+        # First relevant is "paper2" at index 1 (1-indexed: position 2) -> MRR = 1/2 = 0.5
+        assert calculate_mrr(retrieved, ground_truth) == 0.5
+        
+        # First relevant is "paper2" at index 0 -> MRR = 1/1 = 1.0
+        assert calculate_mrr(["paper2", "paper1"], ["paper2"]) == 1.0
+        
+        # No relevant -> 0.0
+        assert calculate_mrr(retrieved, ["paper5"]) == 0.0
+        
+        # MRR edge cases
+        assert calculate_mrr([], ground_truth) == 0.0
+        assert calculate_mrr(retrieved, []) == 0.0
 
     def test_validate_grounding_perfect(self):
         review = """

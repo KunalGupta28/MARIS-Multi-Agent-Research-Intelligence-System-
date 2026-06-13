@@ -4,6 +4,9 @@ MARIS Database — SQLite-backed storage for papers, citations, and workspace se
 This module provides a lightweight, zero-overhead persistence layer using Python's
 built-in sqlite3. No Docker or external database servers are required.
 
+Thread safety: Each call creates a short-lived connection (safe for Streamlit's
+multi-threaded model). WAL mode is enabled for concurrent read performance.
+
 Tables:
     papers       — Stores paper metadata (arXiv ID, title, authors, etc.)
     citations    — Directed citation edges between papers
@@ -15,14 +18,19 @@ from __future__ import annotations
 
 import sqlite3
 import json
+import logging
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
 from src.config import get_settings
 
+logger = logging.getLogger(__name__)
 
 # ── Schema Definitions ───────────────────────────────────────────────
+# All queries use parameterized placeholders (?), providing protection
+# against SQL injection by design.
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS papers (
@@ -76,7 +84,13 @@ CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(status);
 
 
 class MARISDatabase:
-    """Thread-safe SQLite database manager for MARIS."""
+    """
+    Thread-safe SQLite database manager for MARIS.
+
+    Each public method creates a short-lived connection via the ``_connect()``
+    context manager, ensuring safe usage across Streamlit's multi-threaded
+    execution model. WAL journaling is enabled for concurrent read performance.
+    """
 
     def __init__(self, db_path: Optional[Path] = None):
         if db_path is None:
@@ -84,18 +98,43 @@ class MARISDatabase:
         self.db_path = db_path
         self._init_db()
 
-    def _get_conn(self) -> sqlite3.Connection:
-        """Create a new connection (safe for multi-threaded Streamlit use)."""
+    @contextmanager
+    def _connect(self):
+        """
+        Context manager that yields a short-lived SQLite connection.
+
+        Ensures the connection is properly closed after use, preventing
+        connection leaks in long-running Streamlit processes.
+        """
         conn = sqlite3.connect(str(self.db_path))
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA journal_mode=WAL")  # better concurrent read performance
+        conn.execute("PRAGMA foreign_keys=ON")
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def _get_conn(self) -> sqlite3.Connection:
+        """Create a new connection (legacy — prefer ``_connect()`` context manager)."""
+        conn = sqlite3.connect(str(self.db_path))
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     def _init_db(self) -> None:
         """Initialize database schema."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.executescript(_SCHEMA_SQL)
+
+    def close(self) -> None:
+        """Explicit cleanup (no-op for per-call connection model, but signals intent)."""
+        pass  # Each method manages its own connection lifecycle
 
     # ── Papers ────────────────────────────────────────────────────
 
@@ -111,7 +150,7 @@ class MARISDatabase:
         pdf_local_path: str = "",
     ) -> None:
         """Insert or update a paper record."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO papers (arxiv_id, title, authors, abstract, published_date,
@@ -137,7 +176,7 @@ class MARISDatabase:
 
     def get_paper(self, arxiv_id: str) -> Optional[dict]:
         """Retrieve a paper by arXiv ID."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM papers WHERE arxiv_id = ?", (arxiv_id,)
             ).fetchone()
@@ -149,7 +188,7 @@ class MARISDatabase:
 
     def get_all_papers(self) -> list[dict]:
         """Return all ingested papers."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM papers ORDER BY ingested_at DESC"
             ).fetchall()
@@ -160,9 +199,14 @@ class MARISDatabase:
                 results.append(d)
             return results
 
+    def get_paper_count(self) -> int:
+        """Return the total number of papers in the database."""
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
+
     def update_chunk_count(self, arxiv_id: str, count: int) -> None:
         """Update the number of chunks generated for a paper."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 "UPDATE papers SET chunk_count = ? WHERE arxiv_id = ?",
                 (count, arxiv_id),
@@ -180,7 +224,7 @@ class MARISDatabase:
         text: str,
     ) -> None:
         """Store a text chunk for provenance tracking."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO chunks
@@ -192,14 +236,14 @@ class MARISDatabase:
 
     def mark_chunk_embedded(self, chunk_id: str) -> None:
         """Mark a chunk as successfully embedded in the vector store."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 "UPDATE chunks SET embedded = 1 WHERE chunk_id = ?", (chunk_id,)
             )
 
     def get_chunk(self, chunk_id: str) -> Optional[dict]:
         """Retrieve a chunk by its ID with paper metadata for citation grounding."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 """
                 SELECT c.*, p.title, p.authors, p.published_date, p.pdf_url
@@ -221,13 +265,18 @@ class MARISDatabase:
                 return d
             return None
 
+    def get_chunk_count(self) -> int:
+        """Return the total number of chunks in the database."""
+        with self._connect() as conn:
+            return conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
+
     # ── Citations ─────────────────────────────────────────────────
 
     def add_citation(
         self, source_paper_id: str, target_paper_id: str, context: str = ""
     ) -> None:
         """Record a citation edge from one paper to another."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 INSERT OR IGNORE INTO citations (source_paper_id, target_paper_id, context)
@@ -238,7 +287,7 @@ class MARISDatabase:
 
     def get_citations_for_paper(self, arxiv_id: str) -> list[dict]:
         """Get all papers cited by a given paper."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT c.*, p.title as target_title
@@ -252,7 +301,7 @@ class MARISDatabase:
 
     def get_citation_graph(self) -> list[dict]:
         """Return all citation edges for graph visualization."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT c.source_paper_id, c.target_paper_id,
@@ -268,7 +317,7 @@ class MARISDatabase:
 
     def create_session(self, session_id: str, query: str) -> None:
         """Create a new research session."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO sessions (session_id, query, paper_ids)
@@ -300,7 +349,7 @@ class MARISDatabase:
         params.append(session_id)
 
         if updates:
-            with self._get_conn() as conn:
+            with self._connect() as conn:
                 conn.execute(
                     f"UPDATE sessions SET {', '.join(updates)} WHERE session_id = ?",
                     params,
@@ -308,7 +357,7 @@ class MARISDatabase:
 
     def get_session(self, session_id: str) -> Optional[dict]:
         """Retrieve a session by ID."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             row = conn.execute(
                 "SELECT * FROM sessions WHERE session_id = ?", (session_id,)
             ).fetchone()
@@ -320,7 +369,7 @@ class MARISDatabase:
 
     def get_recent_sessions(self, limit: int = 20) -> list[dict]:
         """Return the most recent research sessions."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             rows = conn.execute(
                 "SELECT * FROM sessions ORDER BY updated_at DESC LIMIT ?", (limit,)
             ).fetchall()
@@ -335,7 +384,7 @@ class MARISDatabase:
 
     def get_stats(self) -> dict:
         """Return high-level database statistics."""
-        with self._get_conn() as conn:
+        with self._connect() as conn:
             papers = conn.execute("SELECT COUNT(*) FROM papers").fetchone()[0]
             chunks = conn.execute("SELECT COUNT(*) FROM chunks").fetchone()[0]
             citations = conn.execute("SELECT COUNT(*) FROM citations").fetchone()[0]

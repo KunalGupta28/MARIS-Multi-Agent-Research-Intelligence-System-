@@ -42,7 +42,13 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "rich>=13.9.0",
     "httpx>=0.28.0",
+    "tenacity>=8.5.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/KunalGupta28/MARIS-Multi-Agent-Research-Intelligence-System-"
+Repository = "https://github.com/KunalGupta28/MARIS-Multi-Agent-Research-Intelligence-System-.git"
+Documentation = "https://github.com/KunalGupta28/MARIS-Multi-Agent-Research-Intelligence-System-#readme"
 
 [project.optional-dependencies]
 dev = [
@@ -58,6 +64,10 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+

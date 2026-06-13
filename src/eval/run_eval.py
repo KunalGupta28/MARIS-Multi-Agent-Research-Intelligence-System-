@@ -3,6 +3,7 @@ import os
 import json
 import argparse
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Any
 
@@ -17,6 +18,8 @@ from src.eval.metrics import (
     LatencyTracker,
     calculate_precision_at_k,
     calculate_recall_at_k,
+    calculate_ndcg_at_k,
+    calculate_mrr,
     validate_grounding,
     score_faithfulness,
 )
@@ -151,10 +154,12 @@ def run_benchmark_suite(offline: bool = False) -> Dict[str, Any]:
         retrieved_ids = state.papers_found
         retrieved_chunks = [c.text for c in state.retrieved_chunks]
 
-        # 1. Retrieval Quality (Precision and Recall)
+        # 1. Retrieval Quality (Precision, Recall, NDCG, MRR)
         p_at_1 = calculate_precision_at_k(retrieved_ids, ground_truth, k=1)
         p_at_3 = calculate_precision_at_k(retrieved_ids, ground_truth, k=3)
         r_at_3 = calculate_recall_at_k(retrieved_ids, ground_truth, k=3)
+        ndcg_at_3 = calculate_ndcg_at_k(retrieved_ids, ground_truth, k=3)
+        mrr = calculate_mrr(retrieved_ids, ground_truth)
 
         # 2. Grounding Verification
         grounding_stats = validate_grounding(state.literature_review, set(retrieved_ids))
@@ -170,6 +175,8 @@ def run_benchmark_suite(offline: bool = False) -> Dict[str, Any]:
             "precision_at_1": p_at_1,
             "precision_at_3": p_at_3,
             "recall_at_3": r_at_3,
+            "ndcg_at_3": ndcg_at_3,
+            "mrr": mrr,
             "grounding_score": grounding_stats["grounded_score"],
             "total_citations": grounding_stats["total_citations"],
             "ungrounded_citations": grounding_stats["ungrounded_citations"],
@@ -182,6 +189,13 @@ def run_benchmark_suite(offline: bool = False) -> Dict[str, Any]:
     report_path = PROJECT_ROOT / "data" / "eval_report.md"
     generate_markdown_report(results, report_path, offline)
 
+    # Generate JSON export for programmatic consumption
+    json_path = PROJECT_ROOT / "data" / "eval_report.json"
+    json_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(json_path, "w", encoding="utf-8") as f:
+        json.dump({"timestamp": datetime.now(timezone.utc).isoformat(), "results": results}, f, indent=2, default=str)
+    print(f"[EVAL] JSON export saved to: {json_path}")
+
     return {"results": results, "report_path": report_path}
 
 
@@ -189,14 +203,19 @@ def generate_markdown_report(results: List[Dict], report_path: Path, offline: bo
     """Format and save evaluation results as a professional markdown report."""
     report_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Dynamic timestamp instead of hardcoded date
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
     # Compute averages
     avg_latency = sum(r["overall_latency_sec"] for r in results) / len(results) if results else 0
     avg_grounding = sum(r["grounding_score"] for r in results) / len(results) if results else 0
     avg_faithfulness = sum(r["faithfulness_score"] for r in results) / len(results) if results else 0
+    avg_ndcg = sum(r.get("ndcg_at_3", 0) for r in results) / len(results) if results else 0
+    avg_mrr = sum(r.get("mrr", 0) for r in results) / len(results) if results else 0
 
     md = []
     md.append("# MARIS — End-to-End RAG & Agent Evaluation Report")
-    md.append(f"\n*Generated automatically on 2026-05-26 {'(Offline Mock Mode)' if offline else ''}*")
+    md.append(f"\n*Generated automatically on {timestamp} {'(Offline Mock Mode)' if offline else ''}*")
     md.append("\nThis report benchmarks the Multi-Agent Research Intelligence System (MARIS) across core parameters: retrieval quality, citation grounding, generation faithfulness, and end-to-end latency.")
 
     # KPI summary cards
@@ -204,11 +223,13 @@ def generate_markdown_report(results: List[Dict], report_path: Path, offline: bo
     md.append(f"\n* **Average Latency**: `{avg_latency:.2f} seconds`")
     md.append(f"* **Average Grounding Score**: `{avg_grounding:.2%}` (percentage of citations validated against original papers)")
     md.append(f"* **Average Faithfulness / Anti-Hallucination Score**: `{avg_faithfulness:.2%}`")
+    md.append(f"* **Average NDCG@3**: `{avg_ndcg:.2%}`")
+    md.append(f"* **Average MRR**: `{avg_mrr:.2%}`")
 
     # Benchmarks table
     md.append("\n## 🎯 Query Benchmark Results")
-    md.append("\n| Query | Latency | Chunks | Papers | Precision@3 | Recall@3 | Grounding | Faithfulness |")
-    md.append("|---|---|---|---|---|---|---|---|")
+    md.append("\n| Query | Latency | Chunks | Papers | P@3 | R@3 | NDCG@3 | MRR | Grounding | Faithfulness |")
+    md.append("|---|---|---|---|---|---|---|---|---|---|")
     for r in results:
         md.append(
             f"| **{r['query']}** | "
@@ -217,6 +238,8 @@ def generate_markdown_report(results: List[Dict], report_path: Path, offline: bo
             f"{r['papers_found_count']} | "
             f"{r['precision_at_3']:.2%} | "
             f"{r['recall_at_3']:.2%} | "
+            f"{r.get('ndcg_at_3', 0):.2%} | "
+            f"{r.get('mrr', 0):.2%} | "
             f"{r['grounding_score']:.2%} | "
             f"{r['faithfulness_score']:.2%} |"
         )

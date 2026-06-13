@@ -1,12 +1,12 @@
-
 """
-MARIS ArXiv Client — Asynchronous paper search and PDF downloader.
+MARIS ArXiv Client — Paper search and PDF downloader.
 
 Features:
     - Search arXiv by keyword queries with configurable max results
-    - Download PDFs to local storage asynchronously
+    - Download PDFs to local storage (sync and async)
     - Rate limiting to respect arXiv's 3 req/sec policy
     - Structured metadata extraction (title, authors, abstract, categories)
+    - Pydantic models for type-safe paper representation
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from typing import Optional
 
 import arxiv
 import aiohttp
+from pydantic import BaseModel, ConfigDict, Field
 
 from src.config import get_settings, DATA_DIR
 from src.storage.database import MARISDatabase
@@ -29,31 +30,34 @@ PDF_DIR = DATA_DIR / "pdfs"
 PDF_DIR.mkdir(parents=True, exist_ok=True)
 
 
-class ArxivPaper:
-    """Structured representation of an arXiv paper's metadata."""
+class ArxivPaper(BaseModel):
+    """Structured representation of an arXiv paper's metadata.
 
-    def __init__(
-        self,
-        arxiv_id: str,
-        title: str,
-        authors: list[str],
-        abstract: str,
-        published: str,
-        primary_category: str,
-        pdf_url: str,
-        categories: list[str],
-    ):
-        self.arxiv_id = arxiv_id
-        self.title = title
-        self.authors = authors
-        self.abstract = abstract
-        self.published = published
-        self.primary_category = primary_category
-        self.pdf_url = pdf_url
-        self.categories = categories
+    Uses Pydantic BaseModel for consistency with the rest of the MARIS
+    data model and for built-in validation and serialization support.
+    """
+
+    model_config = ConfigDict(frozen=False)
+
+    arxiv_id: str = Field(description="Clean arXiv ID (e.g., '2301.12345')")
+    title: str = Field(description="Paper title")
+    authors: list[str] = Field(default_factory=list, description="List of author names")
+    abstract: str = Field(default="", description="Paper abstract")
+    published: str = Field(default="", description="Publication date (YYYY-MM-DD)")
+    primary_category: str = Field(default="", description="Primary arXiv category (e.g., 'cs.CL')")
+    pdf_url: str = Field(default="", description="URL to the PDF on arXiv")
+    categories: list[str] = Field(default_factory=list, description="All arXiv categories")
 
     def __repr__(self) -> str:
         return f"ArxivPaper(id={self.arxiv_id}, title='{self.title[:50]}...')"
+
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, ArxivPaper):
+            return NotImplemented
+        return self.arxiv_id == other.arxiv_id
+
+    def __hash__(self) -> int:
+        return hash(self.arxiv_id)
 
 
 class ArxivClient:

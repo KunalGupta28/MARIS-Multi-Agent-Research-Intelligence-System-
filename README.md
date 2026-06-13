@@ -14,15 +14,11 @@ Beautifully rendered Markdown output with interactive source grounding. Every st
 
 ### 📈 Workspace Components, Citations Graph & Benchmarks
 Explore different panels of the research workspace including extracted facts, generated references, the dynamic citation network, and execution metrics.
-```carousel
-![Extracted Facts](docs/images/extracted_facts.png)
-<!-- slide -->
-![References](docs/images/references.png)
-<!-- slide -->
-![Citation Network](docs/images/citation_network.png)
-<!-- slide -->
-![Evaluation Dashboard](docs/images/evaluation_dashboard.png)
-```
+<img width="1862" height="834" alt="evaluation_dashboard" src="https://github.com/user-attachments/assets/556a2b04-105d-4383-8a4e-5d70a43e16a4" />
+<img width="1590" height="816" alt="extracted_facts" src="https://github.com/user-attachments/assets/96f78e39-fe27-4333-af57-db7ad17a7dfa" />
+<img width="1625" height="255" alt="references" src="https://github.com/user-attachments/assets/6268a387-0d4a-46e8-b304-46ad3161135f" />
+<img width="1560" height="477" alt="citation_network" src="https://github.com/user-attachments/assets/11d20151-3783-46bb-b74c-b5f1bc925ae7" />
+
 
 ---
 
@@ -30,40 +26,7 @@ Explore different panels of the research workspace including extracted facts, ge
 
 Unlike single-agent prompts, MARIS divides research tasks among specialized, state-coordinated agent nodes using a **LangGraph StateGraph**.
 
-```mermaid
-graph TD
-    User([User Query]) -->|1. Trigger Session| Graph[LangGraph Orchestrator]
-    Graph -->|2. Coordinate State| Planner{Planner Node}
-    
-    %% Planning Phase
-    Planner -->|3. Decompose Query| SubQueries[3-5 Targeted Sub-queries]
-    
-    %% Retrieval Phase
-    SubQueries --> Retriever[Retriever Node]
-    Retriever -->|4. Async Search| Arxiv[arXiv API]
-    Arxiv -->|5. Local Download| PDFs[PDF Storage]
-    PDFs -->|6. Structural Parsing| Parser[PyMuPDF Parser]
-    
-    %% In-process Storage
-    Parser -->|7. Deduplicate & Store| SQL[(SQLite Relational DB)]
-    Parser -->|8. Index Payload| Qdrant[(Qdrant Vector DB)]
-    
-    %% Fact Extraction
-    Retriever -->|9. Hybrid Retrieval & RRF| Extractor[Extractor Node]
-    Extractor -->|10. Pydantic Structured Output| SQL
-    
-    %% Synthesis Phase
-    Extractor -->|11. Formatted Fact State| Synthesizer[Synthesizer Node]
-    Synthesizer -->|12. Grounded Output| Review([Literature Review])
-    
-    %% Observability Stream
-    Graph -.->|Telemetry & Timing Waterfalls| LangSmith((LangSmith observibility))
-    
-    style Graph fill:#f9f,stroke:#333,stroke-width:2px
-    style LangSmith fill:#8bf,stroke:#333,stroke-width:2px
-    style SQL fill:#fb9,stroke:#333,stroke-width:2px
-    style Qdrant fill:#bfb,stroke:#333,stroke-width:2px
-```
+<img width="531" height="1024" alt="image" src="https://github.com/user-attachments/assets/fa0035d5-d871-4c63-b8b3-d22dcb7af4ed" />
 
 ---
 
